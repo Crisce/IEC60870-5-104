@@ -1,3 +1,25 @@
+/*=============================================================================|
+|  PROJECT IEC60870-5-104 for Arduino                                    1.0.0 |
+|==============================================================================|
+|  Copyright (C) 2020 Michele Criscenzo                                        |
+|  All rights reserved.                                                        |
+|==============================================================================|
+|  IEC60870-5-104 for Arduino is free software: you can redistribute it and/or |
+|  modify it under the terms of the Lesser GNU General Public License as       |
+|  published by the Free Software Foundation, either version 3 of the License, |
+|  or (at your option) any later version.                                      |
+|                                                                              |
+|  It means that you can distribute your commercial software linked with       |
+|  IEC60870-5-104 for Arduino without the requirement to distribute the        |
+|  source code of your application and without the requirement that your       |
+|  application be itself distributed under LGPL.                               |
+|                                                                              |
+|  IEC60870-5-104 for Arduino is distributed in the hope that it will be       |
+|  useful, but WITHOUT ANY WARRANTY; without even the implied warranty of      |
+|  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.                        |
+|  See the Lesser GNU General Public License for more details.                 |
+|=============================================================================*/
+
 #ifndef IEC104_H
 #define IEC104_H
 
