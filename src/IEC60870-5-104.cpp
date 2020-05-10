@@ -253,19 +253,14 @@ int IEC104_HELPER::elaboraBuffer(byte* bufferIn, byte lunghezza, Client *client)
   else if (bitRead(bufferIn[0], 0) && bitRead(bufferIn[0], 1)) //U-FORMAT
   {
     if (bitRead(bufferIn[0], 2)) {
-      Serial.println("Start_DT");  //<--Se ricevo la richiesta (ma come client la devo inviare io)
       inviaU(0x0B);
       dataTransfer=true;
     }
     else if (bitRead(bufferIn[0], 4)) {
-      Serial.println("Stop_DT");  //<--Se ricevo la richiesta (ma come client la devo inviare io)
       inviaU(0x23);
       dataTransfer=false;
     }
-    else if (bitRead(bufferIn[0], 6)) {
-      Serial.println("Test_FR");  //<--Se ricevo la richiesta
-      inviaU(0x83);
-    }
+    else if (bitRead(bufferIn[0], 6)) inviaU(0x83); //Rispondo al TEST
     else if (bufferIn[0] == 0x0B) {} //Risposta dal server START_DT
     else if (bufferIn[0] == 0x23) {} //Risposta dal server STOP_DT
     else if (bufferIn[0] == 0x83) {} //Risposta dal server TEST
@@ -295,9 +290,9 @@ void IEC104_HELPER::read(byte *type, int *ca, long *ioa, long *value)
 void IEC104_HELPER::invia(byte type)
 {
   byte bufferOut[14] = {0x00, 0x00, 0x00, 0x00, 0x64, 0x01, 0x06, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x14}; //Interrogation Command
-  if (C_IC_NA_1) inviaBuf(bufferOut, 14);
+  if (type == C_IC_NA_1) inviaBuf(bufferOut, 14);
   byte msg[] = {0x00, 0x00, 0x00, 0x00, 0x46, 0x01, 0x04, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00}; //M_EI_NA_1 End of Initialisation
-  if (M_EI_NA_1) inviaBuf(msg,sizeof(msg));
+  if (type == M_EI_NA_1) inviaBuf(msg,sizeof(msg));
 }
 
 void IEC104_HELPER::inviaBuf(byte* bufferOut, byte lung)
@@ -358,7 +353,7 @@ IEC104_MASTER::~IEC104_MASTER()
 
 void IEC104_MASTER::setParam(byte param, bool active)
 {
-  //connection.setParam(param, active);
+  bitWrite(parameters,param,active);
 }
 
 void IEC104_MASTER::read(byte *type, int *ca, long *ioa, long *value)
