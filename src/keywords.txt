@@ -1,0 +1,36 @@
+#######################################
+# Syntax Coloring Map For IEC104
+#######################################
+
+#######################################
+# Datatypes (KEYWORD1)
+#######################################
+
+IEC104_MASTER	KEYWORD1
+IEC104_SLAVE	KEYWORD1
+IEC60870-5-104	KEYWORD1
+
+#######################################
+# Methods and Functions (KEYWORD2)
+#######################################
+
+available	KEYWORD2
+read		KEYWORD2
+send		KEYWORD2
+setParam	KEYWORD2
+
+#######################################
+# Constants (LITERAL1)
+#######################################
+
+M_SP_NA_1	LITERAL1
+M_DP_NA_1	LITERAL1
+M_ME_NA_1	LITERAL1
+C_SC_NA_1	LITERAL1
+C_DC_NA_1	LITERAL1
+TIMEOUT_0	LITERAL1
+TIMEOUT_1	LITERAL1
+TIMEOUT_2	LITERAL1
+TIMEOUT_3	LITERAL1
+WIFI	LITERAL1
+WIRED	LITERAL1

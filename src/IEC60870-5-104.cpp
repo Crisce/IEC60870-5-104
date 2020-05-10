@@ -1,5 +1,5 @@
 /*=============================================================================|
-|  PROJECT IEC60870-5-104 for Arduino                                    1.0.0 |
+|  PROJECT IEC60870-5-104 for Arduino                                    1.0.1 |
 |==============================================================================|
 |  Copyright (C) 2020 Michele Criscenzo                                        |
 |  All rights reserved.                                                        |
@@ -22,25 +22,33 @@
 
 #include "IEC60870-5-104.h"
 
+//---------------------------------------------------------IEC60870-5-104 SLAVE---------------------------------------------------------//
+#ifndef IECWIRED
 IEC104_SLAVE::IEC104_SLAVE(WiFiServer *srv)
 {
-  //if(wired) *iecServer = new EthernetServer(port);
-  //else 
   iecServer = &*srv;
-  //iecMaster = new WiFiClient;
-  //*iecServer.begin();
 }
-
+#else
+IEC104_SLAVE::IEC104_SLAVE(EthernetServer *srv)
+{
+  iecServer = &*srv;
+}
+#endif
 IEC104_SLAVE::~IEC104_SLAVE()
 {}
 
 void IEC104_SLAVE::read(byte *type, int *ca, long *ioa, long *value)
 {
-  for(int i=0; i<MAX_SRV_CLIENTS; i++) connection[0].read(&*type, &*ca, &*ioa, &*value);
+  for(int i=0; i<MAX_SRV_CLIENTS; i++) connection[i].read(&*type, &*ca, &*ioa, &*value);
+}
+
+//Imposto i parametri settabili (END OF INITIALIZATION, ecc)
+void IEC104_SLAVE::setParam(byte param, bool active)
+{
+  bitWrite(parameters,param,active);
 }
 
 //IEC 60870-5-104 SLAVE (SERVER)
-
 int IEC104_SLAVE::available()
 {
   if(!avvio)
@@ -48,49 +56,58 @@ int IEC104_SLAVE::available()
     iecServer->begin();
     avvio=true;
   }
-  uint8_t i;
-  if (iecServer->hasClient())
-  //if (*iecServerW.available() > 0)
+
+  bool newClient = false;
+  #ifdef IECWIRED //Ethernet cablata
+  if (iecServer->available())
   {
-    for (i = 0; i < MAX_SRV_CLIENTS; i++) {
+    bool existingClient = false;
+    for (byte i = 0; i < MAX_SRV_CLIENTS; i++) 
+    {
+       if(iecMaster[i] == iecServer->available()) existingClient = true;
+    }
+    if(!existingClient) newClient = true;
+  }
+  #else //WiFi
+  if (iecServer->hasClient())
+  {
+     newClient = true;
+  }
+  #endif
+
+  if(newClient) //Se il client non è già registrato
+  { 
+    bool full = true;
+    for (byte i = 0; i < MAX_SRV_CLIENTS; i++) 
+    {
       //find free/disconnected spot
       if (!iecMaster[i] || !iecMaster[i].connected())
       {
         if (iecMaster[i]) iecMaster[i].stop();
         iecMaster[i] = iecServer->available();
-        if (!iecMaster[i]) Serial.println("available broken");
-        else connection[i].setClient(&iecMaster[i]);
+        full=false;
+        if (iecMaster[i])
+        {
+          connection[i].setClient(&iecMaster[i]);
+          if(bitRead(parameters,0)) connection[i].invia(M_EI_NA_1); //End of Initialization
+        }
         break;
       }
     }
-    if (i >= MAX_SRV_CLIENTS) {
-      //no free/disconnected spot so reject
-      iecServer->available().stop();
-    }
+    if(full) iecServer->available().stop(); //Non ho trovato slot liberi
   }
+
+  //Check clients for data
   int risultato=0;
-  //check clients for data
-  for (i = 0; i < MAX_SRV_CLIENTS; i++)
+  for (byte i = 0; i < MAX_SRV_CLIENTS; i++)
   {
     if (iecMaster[i] && iecMaster[i].connected())
     {
-      risultato += connection[i].check(&iecMaster[i]);
+      risultato += connection[i].check(&iecMaster[i]); //Ricevo il numero di messaggi disponibili dal client
     }
-    else {
-      if (iecMaster[i]) {
-        iecMaster[i].stop();
-      }
-    }
+    else if (iecMaster[i]) iecMaster[i].stop(); //Elimino il client disconnesso
   }
   return risultato;
-}
-
-int IEC104_SLAVE::availableWiFi(WiFiServer iecServer)
-{
-  int result=0;
-  //if(wired) {}//result=startWired(2404);
-  //else result=
-  //availableWifi(*iecServer);
 }
 
 void IEC104_SLAVE::send(byte type, byte num, int ca, long* IOA, long* val) //Invio le misure verso il client (master)
@@ -101,9 +118,10 @@ void IEC104_SLAVE::send(byte type, byte num, int ca, long* IOA, long* val) //Inv
   }
 }
 
+
+//---------------------------------------------------------IEC60870-5-104 MASTER/SLAVE---------------------------------------------------------//
 IEC104_HELPER::IEC104_HELPER()
 {
-  //client2=cli;
 }
 
 void IEC104_HELPER::send(byte type, byte num, int ca, long* IOA, long* val)
@@ -188,7 +206,7 @@ int IEC104_HELPER::elaboraBuffer(byte* bufferIn, byte lunghezza, Client *client)
         bufferTag[bufferCount][3] = val;
         bufferCount++;
       }
-      inviaS(client); //S-FORMAT
+      inviaS(); //S-FORMAT
     }
     else if (type == 0x09) //M_ME_NA_1 Measured value, normalised value
     {
@@ -202,30 +220,30 @@ int IEC104_HELPER::elaboraBuffer(byte* bufferIn, byte lunghezza, Client *client)
         bufferTag[bufferCount][3] = val;
         bufferCount++;
       }
-      inviaS(client); //S-FORMAT
+      inviaS(); //S-FORMAT
     }
     else if (type == 0x64) //C_IC_NA_1 Interrogation command
     {
       byte msg[] = {0x00, 0x64, 0x01, 0x07, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x14};
-      inviaI(client, msg);
+      inviaI(msg);
       Serial.println("Interrogation command");
     }
     else if (type == 0x65) //C_CI_NA_1 Counter interrogation command
     {
       Serial.println("Counter interrogation command");
-      inviaS(client); //S-FORMAT
+      inviaS(); //S-FORMAT
     }
     else if (type == 0x67) //C_CS_NA_1 Clock synchronisation command
     {
       bufferIn[6] = 0x6E; // eIEC870_COT_FILE + P/N + T
-      inviaBuf(client, bufferIn, lunghezza);
+      inviaBuf(bufferIn, lunghezza);
       Serial.println("Clock synchronisation command");
     }
     else
     {
       Serial.print("Type sconosciuto: ");
       Serial.println(type);
-      inviaS(client); //S-FORMAT
+      inviaS(); //S-FORMAT
     }
   }
   else if (bitRead(bufferIn[0], 0) && !bitRead(bufferIn[0], 1)) //S-FORMAT
@@ -236,26 +254,21 @@ int IEC104_HELPER::elaboraBuffer(byte* bufferIn, byte lunghezza, Client *client)
   {
     if (bitRead(bufferIn[0], 2)) {
       Serial.println("Start_DT");  //<--Se ricevo la richiesta (ma come client la devo inviare io)
-      inviaU(client, 0x0B);
+      inviaU(0x0B);
       dataTransfer=true;
     }
     else if (bitRead(bufferIn[0], 4)) {
       Serial.println("Stop_DT");  //<--Se ricevo la richiesta (ma come client la devo inviare io)
-      inviaU(client, 0x23);
+      inviaU(0x23);
       dataTransfer=false;
     }
     else if (bitRead(bufferIn[0], 6)) {
       Serial.println("Test_FR");  //<--Se ricevo la richiesta
-      inviaU(client, 0x83);
+      inviaU(0x83);
     }
-    else if (bufferIn[0] == 0x0B) {
-      Serial.println("Start_DT");  //Risposta dal server
-      inviaS(client); /*avvio=true;*/
-    }
-    else if (bufferIn[0] == 0x23) Serial.println("Stop_DT"); //Risposta dal server
-    else if (bufferIn[0] == 0x83) {
-      Serial.println("Test_FR");  //Risposta dal server
-    }
+    else if (bufferIn[0] == 0x0B) {} //Risposta dal server START_DT
+    else if (bufferIn[0] == 0x23) {} //Risposta dal server STOP_DT
+    else if (bufferIn[0] == 0x83) {} //Risposta dal server TEST
   }
   return bufferCount;
 }
@@ -279,44 +292,44 @@ void IEC104_HELPER::read(byte *type, int *ca, long *ioa, long *value)
   }
 }
 
-void IEC104_HELPER::invia(Client *cli, byte type)
+void IEC104_HELPER::invia(byte type)
 {
   byte bufferOut[14] = {0x00, 0x00, 0x00, 0x00, 0x64, 0x01, 0x06, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x14}; //Interrogation Command
-  if (C_IC_NA_1) inviaBuf(cli, bufferOut, 14);
+  if (C_IC_NA_1) inviaBuf(bufferOut, 14);
   byte msg[] = {0x00, 0x00, 0x00, 0x00, 0x46, 0x01, 0x04, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00}; //M_EI_NA_1 End of Initialisation
-  if (M_EI_NA_1) inviaBuf(cli,msg,sizeof(msg));
+  if (M_EI_NA_1) inviaBuf(msg,sizeof(msg));
 }
 
-void IEC104_HELPER::inviaBuf(Client *cli, byte* bufferOut, byte lung)
+void IEC104_HELPER::inviaBuf(byte* bufferOut, byte lung)
 {
-  cli->write(0x68); //Iniziatore di stringa
-  cli->write(lung); //Lunghezza stringa (minimo 4)
-  for (int i = 0; i < lung; i++) cli->write(bufferOut[i]);
+  client0->write(0x68); //Iniziatore di stringa
+  client0->write(lung); //Lunghezza stringa (minimo 4)
+  for (int i = 0; i < lung; i++) client0->write(bufferOut[i]);
 }
 
 //Invia il U-Format
-void IEC104_HELPER::inviaU(Client *client, byte msg)
+void IEC104_HELPER::inviaU(byte msg)
 {
   byte buf[4];
   buf[0] = msg; //I primi due BIT (alti) indicano l' U-Format
   buf[1] = 0x00;
   buf[2] = 0x00;
   buf[3] = 0x00;
-  inviaBuf(client, buf, 4);
+  inviaBuf(buf, 4);
 }
 
 //Invia il S-Format (conferma messaggio)
-void IEC104_HELPER::inviaS(Client *client)
+void IEC104_HELPER::inviaS()
 {
   byte buf[4];
   buf[0] = 0x01; //Il primo BIT indica l' S-Format
   buf[1] = 0x00;
   buf[2] = (byte)(sequenceRx << 1);
   buf[3] = (byte)(sequenceRx >> 7);
-  inviaBuf(client, buf, 4);
+  inviaBuf(buf, 4);
 }
 
-void IEC104_HELPER::inviaI(Client *client, byte* bufferOut)
+void IEC104_HELPER::inviaI(byte* bufferOut)
 {
   int dim = sizeof(bufferOut);
   byte buf[dim + 4];
@@ -325,10 +338,12 @@ void IEC104_HELPER::inviaI(Client *client, byte* bufferOut)
   buf[2] = (byte)(sequenceRx << 1);
   buf[3] = (byte)(sequenceRx >> 7);
   for (int a = 0; a < dim; a++) buf[a + 4] = bufferOut[a];
-  inviaBuf(client, buf, dim + 4);
+  inviaBuf(buf, dim + 4);
   sequenceTx++; //Incremento il contatore dei messaggi inviati
 }
 
+
+//---------------------------------------------------------IEC60870-5-104 MASTER---------------------------------------------------------//
 IEC104_MASTER::IEC104_MASTER(IPAddress host, int port, bool wired)
 {
   serverIP = host;
@@ -336,9 +351,14 @@ IEC104_MASTER::IEC104_MASTER(IPAddress host, int port, bool wired)
   if(wired) iecSlave = new(EthernetClient); //Connessione cablata
   else iecSlave = new(WiFiClient); //Connessione WiFi
 }
+
 IEC104_MASTER::~IEC104_MASTER()
 {
+}
 
+void IEC104_MASTER::setParam(byte param, bool active)
+{
+  //connection.setParam(param, active);
 }
 
 void IEC104_MASTER::read(byte *type, int *ca, long *ioa, long *value)
@@ -371,9 +391,9 @@ int IEC104_MASTER::available()
   {
     if (avvio) //Invio questi comandi al primo avvio
     {
-      //connection.invia(iecSlave,); //End of initialization
-      connection.inviaU(iecSlave, 0x07); // Start_DT
-      connection.invia(iecSlave, C_IC_NA_1); //Interrogation command
+      if(bitRead(parameters,0)) connection.invia(0x46); //End of initialization
+      connection.inviaU(0x07); // Start_DT
+      if(bitRead(parameters,1)) connection.invia(C_IC_NA_1); //Interrogation command
       delay(100);
       avvio = false;
     }
@@ -398,7 +418,7 @@ int IEC104_MASTER::available()
     }
     else if (timeTest < millis() && !testSent)
     {
-      connection.inviaU(iecSlave, 0x43); //Invio il TEST
+      connection.inviaU(0x43); //Invio il TEST
       testSent = true;
     }
   }

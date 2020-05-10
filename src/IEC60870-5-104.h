@@ -1,5 +1,5 @@
 /*=============================================================================|
-|  PROJECT IEC60870-5-104 for Arduino                                    1.0.0 |
+|  PROJECT IEC60870-5-104 for Arduino                                    1.0.1 |
 |==============================================================================|
 |  Copyright (C) 2020 Michele Criscenzo                                        |
 |  All rights reserved.                                                        |
@@ -22,7 +22,7 @@
 
 #ifndef IEC104_H
 #define IEC104_H
-
+//#define IECWIRED
 
 //Type of data
 #define M_SP_NA_1 0x01 //Single-point information TESTED
@@ -137,16 +137,16 @@ class IEC104_HELPER
     bool dataTransfer=false;
   public:
     IEC104_HELPER();
-    void inviaBuf(Client *cli, byte* bufferOut, byte lung);
-    void inviaU(Client *client, byte msg);
-    void inviaS(Client *client);
-    void inviaI(Client *client, byte* bufferOut);
-    void invia(Client *cli, byte type);
-    int elaboraBuffer(byte* bufferIn, byte lunghezza, Client *client);
+    void inviaBuf(byte* bufferOut, byte lung);
+    void inviaU(byte msg);
+    void inviaS();
+    void inviaI(byte* bufferOut);
+    void invia(byte type);
+    void send(byte type, byte num, int ca, long* IOA, long* val); //Invio le misure verso il client (master)
     void setClient(Client *cli);
     void read(byte *type, int *ca, long *ioa, long *value);
+    int elaboraBuffer(byte* bufferIn, byte lunghezza, Client *client);
     int check(Client *client);
-    void send(byte type, byte num, int ca, long* IOA, long* val); //Invio le misure verso il client (master)
 };
 
 class IEC104_MASTER
@@ -169,9 +169,11 @@ class IEC104_MASTER
   bool testSent=false;
   Client *iecSlave; //Connessione MASTER in uscita (mi connetto ad uno SLAVE)
   IEC104_HELPER connection; //Istanza della gestione telegrammi IEC60870-5-104
+  byte parameters=0; //Settable parameters
   
  public:
   void setTimeout(int timer, int value);
+  void setParam(byte param, bool active);
   int available();
   void read(byte *type, int *ca, long *ioa, long *value);
   IEC104_MASTER(IPAddress host, int port, bool wired);
@@ -194,20 +196,29 @@ class IEC104_SLAVE
     unsigned long timeout0=0;
     unsigned long timeout1=0;
     unsigned long timeTest=0;
-    //Client *iecMaster[MAX_SRV_CLIENTS]; //Connessione MASTER in ingresso (gli SLAVE si connettono a me)
-    WiFiClient iecMaster[MAX_SRV_CLIENTS]; //Connessione MASTER in ingresso (gli SLAVE si connettono a me)
-    IEC104_HELPER connection[MAX_SRV_CLIENTS]; //Connessione MASTER in ingresso (gli SLAVE si connettono a me)
-    WiFiServer *iecServer;
+    IEC104_HELPER connection[MAX_SRV_CLIENTS];
     long bufferTag[64][4];
     bool wired = false;
     bool avvio=false;
+    byte parameters=0; //Settable parameters
+#ifdef IECWIRED
+    EthernetClient iecMaster[MAX_SRV_CLIENTS]; //Connessione MASTER in ingresso (gli SLAVE si connettono a me)
+    EthernetServer *iecServer;
+#else
+    WiFiClient iecMaster[MAX_SRV_CLIENTS]; //Connessione MASTER in ingresso (gli SLAVE si connettono a me)
+    WiFiServer *iecServer;
+#endif
 
   public:
+#ifdef IECWIRED
+    IEC104_SLAVE(EthernetServer *srv);
+#else
     IEC104_SLAVE(WiFiServer *srv);
+#endif
     ~IEC104_SLAVE();
     void read(byte *type, int *ca, long *ioa, long *value);
     int available();
-    int availableWiFi(WiFiServer iecServer);
+    void setParam(byte param, bool active);
     void send(byte type, byte num, int ca, long* IOA, long* val); //Invio le misure verso il client (master)
 
 }; //IEC104_SLAVE
