@@ -1,4 +1,4 @@
-The software implements communication via IEC60870-5-104 on Node-RED as "MASTER" to connect Arduino with PLCs or RTU that use this protocol.
+The software implements communication via IEC60870-5-104 on Node-RED as "MASTER" to connect with PLCs or RTU that use this protocol.
 
 In v1.0.1 are supported:
 M_SP_NA_1 - Single-point information
